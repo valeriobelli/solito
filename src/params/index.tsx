@@ -3,10 +3,10 @@
 import Router from 'next/router'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Platform } from 'react-native'
-import { useRouter } from './use-router'
 
 import { useNavigation } from '../router/use-navigation'
 import { useRoute } from './use-route'
+import { useRouter } from './use-router'
 
 function useStable<T>(value: T) {
   const ref = useRef(value)
@@ -28,6 +28,54 @@ function useStableCallback<T extends (...args: any[]) => any>(
 
   // https://github.com/facebook/react/issues/19240
   return useMemo(() => ((...args) => callbackRef.current?.(...args)) as T, [])
+}
+
+export function createUseParams<
+  Props extends Partial<Record<string, string>> = Partial<
+    Record<string, string>
+  >
+>() {
+  type Options = {
+    initialValue?: Props
+    parse?: (key: string, value: string) => string
+  }
+
+  function identity(_: string, value: string) {
+    return value
+  }
+
+  function useParams({
+    initialValue: initial,
+    parse = identity,
+  }: Options = {}) {
+    const initialValue = useRef(initial || {})
+
+    const nextRouter = useRouter()
+    const nativeRoute = useRoute()
+
+    if (Platform.OS !== 'web' && !nativeRoute) {
+      console.error(
+        `[solito] useParams() called when there is no React Navigation route available. In a future version, this will throw an error. Please fix this by only calling useParams() inside of a React Navigation route. For now, Solito will fallback to using React state.`
+      )
+    }
+
+    const routerParams = Platform.select({
+      default: nextRouter?.query,
+      native: nativeRoute?.params,
+    }) as Readonly<Props>
+
+    const params = routerParams || initialValue.current
+
+    return useMemo(
+      () =>
+        Object.fromEntries(
+          Object.entries(params).map(([key, value]) => [key, parse(key, value)])
+        ),
+      [params]
+    )
+  }
+
+  return { useParams }
 }
 
 type Config<
